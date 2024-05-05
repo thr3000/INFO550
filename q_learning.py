@@ -1,17 +1,20 @@
 import numpy as np
 
+STATE_BOUNDS = [(0, 400), (-10, 10), (0, 400)]
+NUM_BINS = [10, 10, 10]
+
 class QLearningAgent:
-    def __init__(self, num_states, num_actions, alpha, gamma, epsilon, state_bounds, num_bins):
-        self.num_states = num_states
-        self.num_actions = num_actions
+    def __init__(self, alpha, gamma, epsilon):
+        self.num_states = np.prod(NUM_BINS)
+        self.num_actions = 3
         self.alpha = alpha
         self.gamma = gamma
         self.epsilon = epsilon
-        self.Q = np.zeros((num_states, num_actions))
+        self.Q = np.zeros((self.num_states, self.num_actions))
 
-        self.state_bounds = state_bounds
-        self.num_bins = num_bins
-        self.bin_edges = [np.linspace(b[0], b[1], n + 1) for b, n in zip(state_bounds, num_bins)]
+        self.state_bounds = STATE_BOUNDS
+        self.num_bins = NUM_BINS
+        self.bin_edges = [np.linspace(b[0], b[1], n + 1) for b, n in zip(STATE_BOUNDS, NUM_BINS)]
 
     def discretize_state(self, observation):
         indices = []
