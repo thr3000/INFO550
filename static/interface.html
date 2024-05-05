@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pong Game</title>
+    <style>
+        body { display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #333; }
+        canvas { 
+            background: #000;
+            display: block;
+            margin: 0 auto;
+            border: 1px solid white; }
+        #score { 
+            color: white; 
+            text-align: center; 
+            font-size: 24px;
+            position: absolute; 
+            bottom: 100px;
+            width: 100%;
+        }
+        .buttons {
+            text-align: center;
+            position: absolute;
+            top: 100px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="buttons">
+        <button id="addBall" style="font-size: 24px; width: 300px;">Add Ball</button>
+        <button id="smallPaddle" style="font-size: 24px; width: 300px;">Small Paddle</button>
+    </div>
+    <div id="score">Q-Learning: 0 | Deep Q-Learning: 0</div>
+    <canvas id="pongCanvas" width="800" height="400"></canvas>
+<script>
+    const canvas = document.getElementById('pongCanvas');
+    const ctx = canvas.getContext('2d');
+    var balls = [{ x: canvas.width / 2, y: canvas.height / 2, deltaX: 5, deltaY: 5 }];
+
+    const paddleWidth = 10, ballSize = 10;
+    var paddleHeight = 100;
+    let leftPaddleY = canvas.height / 2 - paddleHeight / 2;
+    let rightPaddleY = canvas.height / 2 - paddleHeight / 2;
+    let ballX = canvas.width / 2, ballY = canvas.height / 2;
+    let ballDeltaX = 5, ballDeltaY = 5;
+    let q_score = 0;
+    let dql_score = 0;
+
+    document.getElementById('smallPaddle').addEventListener('click', function() {
+        paddleHeight = (paddleHeight === 100) ? 50 : 100;
+        drawPaddles();
+    });
+
+    document.getElementById('addBall').addEventListener('click', function() {
+        balls.push({
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            deltaX: 5 * (Math.random() > 0.5 ? 1 : -1),
+            deltaY: 5 * (Math.random() > 0.5 ? 1 : -1)
+        });
+    });
+
+    function drawPaddles() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawPaddle(0, leftPaddleY);
+        drawPaddle(canvas.width - paddleWidth, rightPaddleY);
+        balls.forEach(ball => drawBall(ball.x, ball.y));
+    }
+
+    function drawPaddle(x, y) {
+        ctx.fillStyle = '#FFF';
+        ctx.fillRect(x, y, paddleWidth, paddleHeight);
+    }
+
+    function drawBall(x, y) {
+        ctx.fillStyle = '#FFF';
+        ctx.beginPath();
+        ctx.arc(x, y, ballSize, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function updateScore(player) {
+        if (player === 1) {
+            q_score++;
+        } else {
+            dql_score++;
+        }
+        document.getElementById('score').textContent = `Q-Learning: ${q_score} | Deep Q-Learning: ${dql_score}`;
+    }
+    
+    function updateGame() {
+        const ballsData = balls.map(ball => ({
+            x: ball.x,
+            y: ball.y,
+            deltaX: ball.deltaX,
+            deltaY: ball.deltaY
+        }));
+
+        const dataToSend = {
+            balls: ballsData,
+            leftPaddleY: leftPaddleY,
+            rightPaddleY: rightPaddleY,
+            paddleHeight: paddleHeight
+        };
+
+        fetch('/update_game', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dataToSend)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.balls) {
+                data.balls.forEach((ball, index) => {
+                    if (balls[index]) {
+                        balls[index].x = ball.x;
+                        balls[index].y = ball.y;
+                        balls[index].deltaX = ball.deltaX;
+                        balls[index].deltaY = ball.deltaY;
+                    }
+                });
+            }
+            leftPaddleY = data.leftPaddleY;
+            rightPaddleY = data.rightPaddleY;
+        })
+        .catch(error => console.error('Error:', error));
+    }
+
+
+    function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        balls.forEach((ball, index) => {
+            ball.x += ball.deltaX;
+            ball.y += ball.deltaY;
+
+            if (ball.y < 0 || ball.y > canvas.height - ballSize) {
+                ball.deltaY *= -1;
+            }
+
+            if ((ball.x <= paddleWidth && ball.y >= leftPaddleY && ball.y <= leftPaddleY + paddleHeight) ||
+                (ball.x >= canvas.width - paddleWidth - ballSize && ball.y >= rightPaddleY && ball.y <= rightPaddleY + paddleHeight)) {
+                ball.deltaX *= -1;
+            }
+
+            if (ball.x < 0) {
+                updateScore(2);
+                resetBall(ball);
+            } else if (ball.x > canvas.width) {
+                updateScore(1);
+                resetBall(ball);
+            }
+
+            drawBall(ball.x, ball.y);
+        });
+        
+        drawPaddle(0, leftPaddleY);
+        drawPaddle(canvas.width - paddleWidth, rightPaddleY);
+        requestAnimationFrame(gameLoop);
+    }
+
+    function resetBall(ball) {
+        ball.x = canvas.width / 2;
+        ball.y = canvas.height / 2;
+        ball.deltaX = -ball.deltaX;
+    }
+
+    setInterval(updateGame, 100);
+    setInterval(function() {
+        fetch('/update_score', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                q_score: q_score,  // Assuming you have these variables available
+                dql_score: dql_score
+            })
+        })
+        .then(response => response.json())
+        .then(data => console.log("Scores posted:", data))
+        .catch(error => console.error('Error posting scores:', error));
+    }, 60000);
+    gameLoop();
+</script>
+</body>
+</html>
